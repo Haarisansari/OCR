@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Image Text Extractor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #aaa;
+        }
+        .upload-area.highlight {
+            border-color: #2196F3;
+            background-color: #f8f9fa;
+        }
+        #file-input {
+            display: none;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .result-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .result-text {
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .error {
+            color: #d9534f;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>OCR Image Text Extractor</h1>
+    
+    <div class="container">
+        <p>Upload an image to extract text using OCR technology.</p>
+        
+        <div class="upload-area" id="drop-area">
+            <p>Drag and drop an image here or click to select a file</p>
+            <input type="file" id="file-input" accept=".jpg, .jpeg, .png, .gif, .bmp, .tiff">
+            <button class="btn" id="upload-btn">Select Image</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            <p>Processing image, please wait...</p>
+        </div>
+        
+        <div class="error" id="error-message"></div>
+        
+        <div class="result-container" id="result-container">
+            <h3>Extracted Text:</h3>
+            <div class="result-text" id="result-text"></div>
+            <button class="btn" id="copy-btn" style="margin-top: 10px;">Copy Text</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('file-input');
+            const uploadBtn = document.getElementById('upload-btn');
+            const loading = document.getElementById('loading');
+            const resultContainer = document.getElementById('result-container');
+            const resultText = document.getElementById('result-text');
+            const errorMessage = document.getElementById('error-message');
+            const copyBtn = document.getElementById('copy-btn');
+            
+            // Open file dialog when upload button is clicked
+            uploadBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // Handle file selection
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files.length > 0) {
+                    uploadFile(fileInput.files[0]);
+                }
+            });
+            
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight drop area when dragging over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle dropped files
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            // Copy text to clipboard
+            copyBtn.addEventListener('click', function() {
+                const text = resultText.textContent;
+                navigator.clipboard.writeText(text).then(function() {
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = 'Copy Text';
+                    }, 2000);
+                }, function(err) {
+                    console.error('Could not copy text: ', err);
+                });
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                dropArea.classList.add('highlight');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('highlight');
+            }
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    uploadFile(files[0]);
+                }
+            }
+            
+            function uploadFile(file) {
+                // Check if file is an image
+                if (!file.type.match('image.*')) {
+                    showError('Please upload an image file');
+                    return;
+                }
+                
+                // Show loading indicator
+                loading.style.display = 'block';
+                resultContainer.style.display = 'none';
+                errorMessage.style.display = 'none';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Error processing image');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loading.style.display = 'none';
+                    resultContainer.style.display = 'block';
+                    resultText.textContent = data.text;
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    showError(error.message);
+                });
+            }
+            
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
