@@ -1,6 +1,8 @@
 import cv2
 import pytesseract
 import os
+import requests
+import json
 
 # Set the path to tesseract executable
 # Uncomment and modify the line below if tesseract is not in your PATH
@@ -30,15 +32,69 @@ def preprocess_image(image_path):
     
     return denoised
 
-def process_image(image_path):
+def translate_text(text, target_lang='en'):
+    """
+    Translate text using Google Translate web API
+    
+    Args:
+        text (str): Text to translate
+        target_lang (str): Target language code
+        
+    Returns:
+        dict: Translation result with detected language and translated text
+    """
+    import urllib.parse
+    import urllib.request
+    import json
+    
+    try:
+        # URL encode the text
+        text_encoded = urllib.parse.quote(text)
+        
+        # Create Google Translate URL
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={text_encoded}"
+        
+        # Create a request with a user-agent to avoid being blocked
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        req = urllib.request.Request(url, headers=headers)
+        
+        # Get the response
+        response = urllib.request.urlopen(req)
+        
+        # Parse the JSON response
+        result = json.loads(response.read().decode('utf-8'))
+        
+        # Extract the translated text
+        translated_text = ''.join([sentence[0] for sentence in result[0]])
+        
+        # Extract detected language
+        detected_lang = result[2] if len(result) > 2 else "unknown"
+        
+        return {
+            "detected_language": detected_lang,
+            "translated_text": translated_text,
+            "success": True
+        }
+    except Exception as e:
+        # Fallback to original text if translation fails
+        return {
+            "detected_language": "unknown",
+            "translated_text": None,
+            "success": False,
+            "error": str(e)
+        }
+
+
+def process_image(image_path, translate_to_english=False):
     """
     Process an image and extract text using OCR
     
     Args:
         image_path (str): Path to the input image
+        translate_to_english (bool): Whether to translate non-English text to English
         
     Returns:
-        str: Extracted text from the image
+        dict: Dictionary containing extracted text and translation information
     """
     # Check if file exists
     if not os.path.exists(image_path):
@@ -48,10 +104,38 @@ def process_image(image_path):
         # Preprocess the image
         processed_image = preprocess_image(image_path)
         
-        # Apply OCR to extract text
-        extracted_text = pytesseract.image_to_string(processed_image)
+        # Use Indian languages + English
+        # The '+' tells Tesseract to use multiple language models
+        extracted_text = pytesseract.image_to_string(
+            processed_image, 
+            lang='eng+hin+tam+tel+mar+pan+guj+ben'
+        )
         
-        return extracted_text
+        result = {
+            "original_text": extracted_text,
+            "language": "auto",  # We're using multiple languages
+            "translated_text": None,
+            "is_translated": False
+        }
+        
+        # If translation is requested and text was extracted
+        if translate_to_english and extracted_text.strip():
+            try:
+                # Use LibreTranslate API instead of googletrans
+                translation = translate_text(extracted_text)
+                
+                if translation["success"]:
+                    result["language"] = translation["detected_language"]
+                    
+                    # Only set as translated if language is not English
+                    if translation["detected_language"] != "en":
+                        result["translated_text"] = translation["translated_text"]
+                        result["is_translated"] = True
+            except Exception as e:
+                # If translation fails, return the original text
+                result["translation_error"] = str(e)
+        
+        return result
     except Exception as e:
         raise Exception(f"Error processing image: {str(e)}")
 
@@ -69,5 +153,5 @@ def extract_structured_data(image_path):
     # For example, extracting specific fields from forms, invoices, etc.
     
     # For now, we'll just return the raw text as a dictionary
-    text = process_image(image_path)
-    return {"raw_text": text}
+    result = process_image(image_path)
+    return {"raw_text": result["original_text"]}

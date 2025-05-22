@@ -90,6 +90,10 @@
             <p>Drag and drop an image here or click to select a file</p>
             <input type="file" id="file-input" accept=".jpg, .jpeg, .png, .gif, .bmp, .tiff">
             <button class="btn" id="upload-btn">Select Image</button>
+            <div style="margin-top: 15px;">
+                <input type="checkbox" id="translate-checkbox" checked>
+                <label for="translate-checkbox">Translate non-English text to English</label>
+            </div>
         </div>
         
         <div class="loading" id="loading">
@@ -100,7 +104,12 @@
         
         <div class="result-container" id="result-container">
             <h3>Extracted Text:</h3>
+            <div id="language-info" style="margin-bottom: 10px; font-style: italic;"></div>
             <div class="result-text" id="result-text"></div>
+            <div id="translation-container" style="margin-top: 15px; display: none;">
+                <h3>English Translation:</h3>
+                <div class="result-text" id="translated-text"></div>
+            </div>
             <button class="btn" id="copy-btn" style="margin-top: 10px;">Copy Text</button>
         </div>
     </div>
@@ -148,8 +157,15 @@
             
             // Copy text to clipboard
             copyBtn.addEventListener('click', function() {
-                const text = resultText.textContent;
-                navigator.clipboard.writeText(text).then(function() {
+                // Get both original and translated text if available
+                let textToCopy = resultText.textContent;
+                const translatedText = document.getElementById('translated-text');
+                
+                if (translatedText && translatedText.textContent && document.getElementById('translation-container').style.display !== 'none') {
+                    textToCopy += '\n\nEnglish Translation:\n' + translatedText.textContent;
+                }
+                
+                navigator.clipboard.writeText(textToCopy).then(function() {
                     copyBtn.textContent = 'Copied!';
                     setTimeout(() => {
                         copyBtn.textContent = 'Copy Text';
@@ -196,6 +212,10 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 
+                // Add translation preference
+                const translateCheckbox = document.getElementById('translate-checkbox');
+                formData.append('translate', translateCheckbox.checked);
+                
                 fetch('/upload', {
                     method: 'POST',
                     body: formData
@@ -211,7 +231,26 @@
                 .then(data => {
                     loading.style.display = 'none';
                     resultContainer.style.display = 'block';
-                    resultText.textContent = data.text;
+                    
+                    // Display original text
+                    resultText.textContent = data.original_text;
+                    
+                    // Show language information
+                    const languageInfo = document.getElementById('language-info');
+                    const translationContainer = document.getElementById('translation-container');
+                    const translatedText = document.getElementById('translated-text');
+                    
+                    // Get language name
+                    const languageName = getLanguageName(data.language);
+                    languageInfo.textContent = `Detected language: ${languageName} (${data.language})`;
+                    
+                    // Handle translation if available
+                    if (data.is_translated && data.translated_text) {
+                        translationContainer.style.display = 'block';
+                        translatedText.textContent = data.translated_text;
+                    } else {
+                        translationContainer.style.display = 'none';
+                    }
                 })
                 .catch(error => {
                     loading.style.display = 'none';
@@ -222,6 +261,39 @@
             function showError(message) {
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
+            }
+            
+            // Helper function to get language name from language code
+            function getLanguageName(code) {
+                const languages = {
+                    'en': 'English',
+                    'es': 'Spanish',
+                    'fr': 'French',
+                    'de': 'German',
+                    'it': 'Italian',
+                    'pt': 'Portuguese',
+                    'ru': 'Russian',
+                    'zh-cn': 'Chinese (Simplified)',
+                    'zh-tw': 'Chinese (Traditional)',
+                    'ja': 'Japanese',
+                    'ko': 'Korean',
+                    'ar': 'Arabic',
+                    'hi': 'Hindi',
+                    'bn': 'Bengali',
+                    'ur': 'Urdu',
+                    'te': 'Telugu',
+                    'ta': 'Tamil',
+                    'mr': 'Marathi',
+                    'gu': 'Gujarati',
+                    'kn': 'Kannada',
+                    'ml': 'Malayalam',
+                    'pa': 'Punjabi',
+                    'or': 'Odia',
+                    'as': 'Assamese',
+                    'auto': 'Auto-detected'
+                };
+                
+                return languages[code.toLowerCase()] || code;
             }
         });
     </script>

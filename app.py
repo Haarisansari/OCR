@@ -42,6 +42,9 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
+    # Get translation preference
+    translate_to_english = request.form.get('translate', 'false').lower() == 'true'
+    
     # Check if file has an allowed extension
     if file and allowed_file(file.filename):
         # Secure the filename to prevent security issues
@@ -53,8 +56,8 @@ def upload_file():
         
         # Process the image with OCR
         try:
-            extracted_text = process_image(filepath)
-            return jsonify({'text': extracted_text})
+            result = process_image(filepath, translate_to_english=translate_to_english)
+            return jsonify(result)
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     else:
